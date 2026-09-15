@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="root"></div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.1.1/bundles/stomp.umd.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script>
+        const e = React.createElement;
+
+        function App() {
+            const [id, setId] = React.useState('');
+            const [userName, setUserName] = React.useState('');
+            const [, setStatus] = React.useState('Connecting...');
+            const [submitted, setSubmitted] = React.useState(false);
+            const client = React.useRef(null);
+            const [gameStateJson, setGameStateJson] = React.useState(null);
+            const [userHands, setUserHands] = React.useState([]);
+            const [selectedHand, setSelectedHand] = React.useState(0);
+            const isPlayersTurn = id.trim() !== '' &&
+                Number.isInteger(Number(id)) &&
+                gameStateJson?.IdOfPlayersTurn != null &&
+                Number(gameStateJson.IdOfPlayersTurn) === Number(id);
+
+            React.useEffect(() => {
+                const stompClient = new StompJs.Client({
+                    brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
+                });
+                stompClient.onConnect = () => {
+                    setStatus('Connected');
+                    stompClient.subscribe('/topic/messages', frame => {
+                        const message = frame.body.trim();
+                        console.log(message);
+
+                        const jsonUpdatePrefix = 'JsonUpdate:';
+                        if (message.startsWith(jsonUpdatePrefix)) {
+                            const json = message.slice(jsonUpdatePrefix.length);
+                            try {
+                                const parsedGameState = JSON.parse(json);
+                                setGameStateJson(parsedGameState);
+                            } catch (error) {
+                                setStatus('Received invalid game state JSON.');
+                                return;
+                            }
+                        }
+                        setStatus(message);
+                        if (message.startsWith('PlayerJoin:')) {
+                            setSubmitted(true);
+                        }
+                    });
+                };
+                stompClient.onWebSocketError = () => setStatus('Connection error');
+                stompClient.activate();
+                client.current = stompClient;
+                return () => stompClient.deactivate();
+            }, []);
+
+
+            React.useEffect(() => {
+                if (gameStateJson !== null) {
+                    const playerWithHands = gameStateJson.playerWithHands;
+                    const playerHands = playerWithHands?.[Number(id)];
+                    const updatedUserHands = playerHands ?? [];
+                    setUserHands(updatedUserHands);
+                    setSelectedHand(currentHand => Math.min(currentHand, Math.max(updatedUserHands.length - 1, 0)));
+                    console.log('Player hands updated:', updatedUserHands);
+                    
+                }
+            }, [gameStateJson, id]);
+
+            
+            function addPlayer(event) {
+                event.preventDefault();
+                if (!client.current || !client.current.connected) {
+                    setStatus('WebSocket is not connected.');
+                    return;
+                }
+                client.current.publish({
+                    destination: '/app/message',
+                    body: JSON.stringify({
+                        action: 'ADD_PLAYER',
+                        id: Number(id),
+                        username: userName.trim()
+                    })
+                });
+            }
+
+            function sendGameAction(action, fields = {}) {
+                if (!ifConnectionIsGood()) {
+                    return;
+                }
+                client.current.publish({
+                    destination: '/app/message',
+                    body: JSON.stringify({ action, ...fields })
+                });
+            }
+
+            function startRound() {
+                sendGameAction('START_ROUND', { wager: 5 });
+            }
+
+            function endRound() {
+                sendGameAction('UPDATE_ACCOUNT');
+            }
+
+            function hit() {
+                const selectedCards = userHands[selectedHand]?.hand ?? [];
+                sendGameAction('ADD_CARD', {
+                    playerId: Number(id),
+                    username: userName.trim(),
+                    handArrayNum: selectedHand,
+                    addedCardNumber: selectedCards.length + 1
+                });
+            }
+            function stand() {
+                sendGameAction('HOLD_HAND', {
+                    playerId: Number(id),
+                    username: userName.trim(),
+                    handArrayNum: selectedHand,
+                });
+            }
+            function split() {
+                sendGameAction('SPLIT_HAND', {
+                    playerId: Number(id),
+                    handArrayNum: selectedHand,
+                });
+            }
+            function addCredits() {
+                sendGameAction('UPDATE_ACCOUNT');
+            }
+            function exit() {
+                sendGameAction('PLAYER_EXIT', { playerId: Number(id) });
+            }
+
+            const firstPlayerHands = Object.values(gameStateJson?.playerWithHands ?? {})[0] ?? [];
+            const secondPlayerHands = Object.values(gameStateJson?.playerWithHands ?? {})[1] ?? [];
+            const thirdPlayerHands = Object.values(gameStateJson?.playerWithHands ?? {})[2] ?? [];
+            const fourthPlayerHands = Object.values(gameStateJson?.playerWithHands ?? {})[3] ?? [];
+            const fifthPlayerHands = Object.values(gameStateJson?.playerWithHands ?? {})[4] ?? [];
+
+            function ifConnectionIsGood() {
+                if (!client.current || !client.current.connected) {
+                    setStatus('WebSocket is not connected.');
+                    return false;
+                }
+                return true;
+            }
+
+            function getPlayerBoxClass(playerIndex) {
+                return gameStateJson?.playerActionsEnded !== true &&
+                    gameStateJson?.playerActionCount === playerIndex
+                    ? 'hand-box active-player'
+                    : 'hand-box';
+            }
+
+            return e('div', null,
+                !submitted && e('main', null,
+                    e('div', { className: 'modal-backdrop' },
+                        e('section', { className: 'modal', role: 'dialog', 'aria-modal': 'true' },
+                            e('h1', null, 'Add Player'),
+                            e('form', { onSubmit: addPlayer },
+                                e('label', null, 'ID', e('input', {
+                                    type: 'number', min: '1', required: true, value: id,
+                                    onChange: event => setId(event.target.value)
+                                })),
+                                e('label', null, 'User name', e('input', {
+                                    type: 'text', required: true, value: userName,
+                                    onChange: event => setUserName(event.target.value)
+                                })),
+                                e('button', { type: 'submit' }, 'Add player')
+                            )
+                        )
+                    )
+                ),
+                e('main', { className: 'hand-board' },
+                    e('section', { className: 'hand-box' },
+                        e('div', { className: 'dealer-label' }, 'Dealer'),
+                        e('div', { className: 'box-cards' },
+                        
+                            e('div', { className: 'sub-box' },
+                                `${gameStateJson?.dealerHand?.hand?.[0]?.rank ?? ''} ${gameStateJson?.dealerHand?.hand?.[0]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${gameStateJson?.dealerHand?.hand?.[1]?.rank ?? ''} ${gameStateJson?.dealerHand?.hand?.[1]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' }),
+                            e('div', { className: 'sub-box' }),
+                            e('div', { className: 'sub-box' })
+                        ),
+                        e('div', { className: 'hand-status' },
+                            `Best hand value: ${gameStateJson?.dealerHand?.bestHandValue ?? ''}`),
+                    ),
+                    
+                    e('section', { className: getPlayerBoxClass(0) },
+                        e('div', { className: 'dealer-label' }, gameStateJson?.playerList?.[0]?.playerName ?? ''),
+                        e('div', { className: 'hand-status' },
+                            `PlayerName: ${gameStateJson?.playerList?.[0]?.playerName ?? ''} | `,
+                            `BankRoll: ${gameStateJson?.playerList?.[0]?.bankRoll ?? ''} | `,
+                            `PlayerState: ${gameStateJson?.playerList?.[0]?.playerState ?? ''}`),
+                        e('div', { className: 'hand-tabs', role: 'tablist' },
+                            firstPlayerHands.map((hand, handIndex) => e('button', {
+                                className: 'box-tab',
+                                type: 'button',
+                                onClick: () => setSelectedHand(handIndex),
+                                'aria-selected': selectedHand === handIndex,
+                                key: handIndex
+                            }, `Hand ${handIndex + 1}`))
+                        ),
+
+                        e('div', { className: 'box-cards' },
+                        
+                            e('div', { className: 'sub-box' },
+                                `${firstPlayerHands[selectedHand]?.hand?.[0]?.rank ?? ''} ${firstPlayerHands[selectedHand]?.hand?.[0]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${firstPlayerHands[selectedHand]?.hand?.[1]?.rank ?? ''} ${firstPlayerHands[selectedHand]?.hand?.[1]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${firstPlayerHands[selectedHand]?.hand?.[2]?.rank ?? ''} ${firstPlayerHands[selectedHand]?.hand?.[2]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${firstPlayerHands[selectedHand]?.hand?.[3]?.rank ?? ''} ${firstPlayerHands[selectedHand]?.hand?.[3]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${firstPlayerHands[selectedHand]?.hand?.[4]?.rank ?? ''} ${firstPlayerHands[selectedHand]?.hand?.[4]?.suit ?? ''}`),
+                        ),
+                        e('div', { className: 'hand-status' },
+                            `Best hand value: ${firstPlayerHands[selectedHand]?.bestHandValue ?? ''} | `,
+                            `Result: ${firstPlayerHands[selectedHand]?.handResult ?? ''} | `,
+                            `State: ${firstPlayerHands[selectedHand]?.handState ?? ''}`),
+
+                        
+                    ),
+                    e('section', { className: getPlayerBoxClass(1) },
+                        e('div', { className: 'dealer-label' }, gameStateJson?.playerList?.[1]?.playerName ?? ''),
+                        e('div', { className: 'hand-status' },
+                            `PlayerName: ${gameStateJson?.playerList?.[1]?.playerName ?? ''} | `,
+                            `BankRoll: ${gameStateJson?.playerList?.[1]?.bankRoll ?? ''} | `,
+                            `PlayerState: ${gameStateJson?.playerList?.[1]?.playerState ?? ''}`),
+                        e('div', { className: 'hand-tabs', role: 'tablist' },
+                            secondPlayerHands.map((hand, handIndex) => e('button', {
+                                className: 'box-tab',
+                                type: 'button',
+                                onClick: () => setSelectedHand(handIndex),
+                                'aria-selected': selectedHand === handIndex,
+                                key: handIndex
+                            }, `Hand ${handIndex + 1}`))
+                        ),
+                        e('div', { className: 'box-cards' },
+                            e('div', { className: 'sub-box' },
+                                `${secondPlayerHands[selectedHand]?.hand?.[0]?.rank ?? ''} ${secondPlayerHands[selectedHand]?.hand?.[0]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${secondPlayerHands[selectedHand]?.hand?.[1]?.rank ?? ''} ${secondPlayerHands[selectedHand]?.hand?.[1]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${secondPlayerHands[selectedHand]?.hand?.[2]?.rank ?? ''} ${secondPlayerHands[selectedHand]?.hand?.[2]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${secondPlayerHands[selectedHand]?.hand?.[3]?.rank ?? ''} ${secondPlayerHands[selectedHand]?.hand?.[3]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${secondPlayerHands[selectedHand]?.hand?.[4]?.rank ?? ''} ${secondPlayerHands[selectedHand]?.hand?.[4]?.suit ?? ''}`)
+                        ),
+                        e('div', { className: 'hand-status' },
+                            `Best hand value: ${secondPlayerHands[selectedHand]?.bestHandValue ?? ''} | `,
+                            `Result: ${secondPlayerHands[selectedHand]?.handResult ?? ''} | `,
+                            `State: ${secondPlayerHands[selectedHand]?.handState ?? ''}`)
+                    ),
+                    e('section', { className: getPlayerBoxClass(2) },
+                        e('div', { className: 'dealer-label' }, gameStateJson?.playerList?.[2]?.playerName ?? ''),
+                        e('div', { className: 'hand-status' },
+                            `PlayerName: ${gameStateJson?.playerList?.[2]?.playerName ?? ''} | `,
+                            `BankRoll: ${gameStateJson?.playerList?.[2]?.bankRoll ?? ''} | `,
+                            `PlayerState: ${gameStateJson?.playerList?.[2]?.playerState ?? ''}`),
+                        e('div', { className: 'hand-tabs', role: 'tablist' },
+                            thirdPlayerHands.map((hand, handIndex) => e('button', {
+                                className: 'box-tab',
+                                type: 'button',
+                                onClick: () => setSelectedHand(handIndex),
+                                'aria-selected': selectedHand === handIndex,
+                                key: handIndex
+                            }, `Hand ${handIndex + 1}`))
+                        ),
+                        e('div', { className: 'box-cards' },
+                            e('div', { className: 'sub-box' },
+                                `${thirdPlayerHands[selectedHand]?.hand?.[0]?.rank ?? ''} ${thirdPlayerHands[selectedHand]?.hand?.[0]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${thirdPlayerHands[selectedHand]?.hand?.[1]?.rank ?? ''} ${thirdPlayerHands[selectedHand]?.hand?.[1]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${thirdPlayerHands[selectedHand]?.hand?.[2]?.rank ?? ''} ${thirdPlayerHands[selectedHand]?.hand?.[2]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${thirdPlayerHands[selectedHand]?.hand?.[3]?.rank ?? ''} ${thirdPlayerHands[selectedHand]?.hand?.[3]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${thirdPlayerHands[selectedHand]?.hand?.[4]?.rank ?? ''} ${thirdPlayerHands[selectedHand]?.hand?.[4]?.suit ?? ''}`)
+                        ),
+                        e('div', { className: 'hand-status' },
+                            `Best hand value: ${thirdPlayerHands[selectedHand]?.bestHandValue ?? ''} | `,
+                            `Result: ${thirdPlayerHands[selectedHand]?.handResult ?? ''} | `,
+                            `State: ${thirdPlayerHands[selectedHand]?.handState ?? ''}`)
+                    ),
+                    e('section', { className: getPlayerBoxClass(3) },
+                        e('div', { className: 'dealer-label' }, gameStateJson?.playerList?.[3]?.playerName ?? ''),
+                        e('div', { className: 'hand-status' },
+                            `PlayerName: ${gameStateJson?.playerList?.[3]?.playerName ?? ''} | `,
+                            `BankRoll: ${gameStateJson?.playerList?.[3]?.bankRoll ?? ''} | `,
+                            `PlayerState: ${gameStateJson?.playerList?.[3]?.playerState ?? ''}`),
+                        e('div', { className: 'hand-tabs', role: 'tablist' },
+                            fourthPlayerHands.map((hand, handIndex) => e('button', {
+                                className: 'box-tab',
+                                type: 'button',
+                                onClick: () => setSelectedHand(handIndex),
+                                'aria-selected': selectedHand === handIndex,
+                                key: handIndex
+                            }, `Hand ${handIndex + 1}`))
+                        ),
+                        e('div', { className: 'box-cards' },
+                            e('div', { className: 'sub-box' },
+                                `${fourthPlayerHands[selectedHand]?.hand?.[0]?.rank ?? ''} ${fourthPlayerHands[selectedHand]?.hand?.[0]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fourthPlayerHands[selectedHand]?.hand?.[1]?.rank ?? ''} ${fourthPlayerHands[selectedHand]?.hand?.[1]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fourthPlayerHands[selectedHand]?.hand?.[2]?.rank ?? ''} ${fourthPlayerHands[selectedHand]?.hand?.[2]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fourthPlayerHands[selectedHand]?.hand?.[3]?.rank ?? ''} ${fourthPlayerHands[selectedHand]?.hand?.[3]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fourthPlayerHands[selectedHand]?.hand?.[4]?.rank ?? ''} ${fourthPlayerHands[selectedHand]?.hand?.[4]?.suit ?? ''}`)
+                        ),
+                        e('div', { className: 'hand-status' },
+                            `Best hand value: ${fourthPlayerHands[selectedHand]?.bestHandValue ?? ''} | `,
+                            `Result: ${fourthPlayerHands[selectedHand]?.handResult ?? ''} | `,
+                            `State: ${fourthPlayerHands[selectedHand]?.handState ?? ''}`)
+                    ),
+                    e('section', { className: 'hand-box' },
+                        e('div', { className: 'dealer-label' }, Object.keys(gameStateJson?.playerWithHands ?? {})[4] ?? ''),
+                        e('div', { className: 'hand-tabs', role: 'tablist' },
+                            fifthPlayerHands.map((hand, handIndex) => e('button', {
+                                className: 'box-tab',
+                                type: 'button',
+                                onClick: () => setSelectedHand(handIndex),
+                                'aria-selected': selectedHand === handIndex,
+                                key: handIndex
+                            }, `Hand ${handIndex + 1}`))
+                        ),
+                        e('div', { className: 'box-cards' },
+                            e('div', { className: 'sub-box' },
+                                `${fifthPlayerHands[selectedHand]?.hand?.[0]?.rank ?? ''} ${fifthPlayerHands[selectedHand]?.hand?.[0]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fifthPlayerHands[selectedHand]?.hand?.[1]?.rank ?? ''} ${fifthPlayerHands[selectedHand]?.hand?.[1]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fifthPlayerHands[selectedHand]?.hand?.[2]?.rank ?? ''} ${fifthPlayerHands[selectedHand]?.hand?.[2]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fifthPlayerHands[selectedHand]?.hand?.[3]?.rank ?? ''} ${fifthPlayerHands[selectedHand]?.hand?.[3]?.suit ?? ''}`),
+                            e('div', { className: 'sub-box' },
+                                `${fifthPlayerHands[selectedHand]?.hand?.[4]?.rank ?? ''} ${fifthPlayerHands[selectedHand]?.hand?.[4]?.suit ?? ''}`)
+                        ),
+                        e('div', { className: 'hand-status' },
+                            `Best hand value: ${fifthPlayerHands[selectedHand]?.bestHandValue ?? ''} | `,
+                            `Result: ${fifthPlayerHands[selectedHand]?.handResult ?? ''} | `,
+                            `State: ${fifthPlayerHands[selectedHand]?.handState ?? ''}`)
+                    )
+                ),
+                
+                e('nav', { className: 'bottom-bar' },
+                    e('button', { type: 'button', onClick: startRound, disabled: gameStateJson !== null && Object.keys(gameStateJson).length > 0 }, 'Start Round'),
+                    e('button', { type: 'button', onClick: endRound, disabled: gameStateJson?.playerActionsEnded !== true }, 'End Round'),
+                    e('button', { type: 'button', onClick: hit, disabled: !isPlayersTurn }, 'Hit'),
+                    e('button', { type: 'button', onClick: stand, disabled: !isPlayersTurn }, 'Stand'),
+                    e('button', { type: 'button', onClick: split, disabled: !isPlayersTurn }, 'Split'),
+                    e('button', {  type: 'button',  onClick: addCredits, disabled: gameStateJson !== null && Object.keys(gameStateJson).length > 0 }, 'addCredits'),
+                    e('button', { type: 'button', onClick: exit }, 'Exit'),
+                )
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+    </script>
+</body>
+</html>
