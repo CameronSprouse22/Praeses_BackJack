@@ -14,6 +14,7 @@ public class GameStateManager {
     private static final Logger logger = LogManager.getLogger(GameStateManager.class);
 
     private ArrayList<Player> players= new ArrayList<>();
+    private ArrayList<Player> playersToAddAtEndOfRound= new ArrayList<>();
     PlayerDataManager playerDataManager= new PlayerDataManager();
     PlayDeck playDeck;
     Round round;
@@ -22,10 +23,8 @@ public class GameStateManager {
     int currentWager;
 
     public GameStateManager() {
-        messageManager=new MessageManager();
         tableSettings=new TableSettings();
         playDeck=new PlayDeck(tableSettings.getNumDecks());
-        MessageManager.gameTableCreated("Table Created");
         MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Table Created");
         logger.debug("Game Created");
     }
@@ -35,7 +34,8 @@ public class GameStateManager {
         for(Player player: players){    
             if(player.playerID == id){
                 logger.debug("User already in game in -> id:"+id+" username:"+username);
-                MessageManager.playerAlreadyAdded("id:"+id+" username:"+username);
+                MessageManager.playerLogin(id);
+                MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Table Created");
                 return;
             }
         }
@@ -43,34 +43,41 @@ public class GameStateManager {
         Player player=playerDataManager.getPlayerData(id,username);
         if(!player.validatePlayerData()){
             logger.debug("Bad player String id:"+id+" username:"+username);
-            MessageManager.messageUser(player.badPlayerDataString());
+            MessageManager.messageSingleUser("Bad input", id);
             return;
         }
-        players.add(player);
+
+        if(round ==null){
+            players.add(player);
+        }else{
+            playersToAddAtEndOfRound.add(player);
+        }
+        
         logger.debug("New Player Added:"+id+" username:"+username);
 
-        MessageManager.playerAdded("id:"+id+" username:"+username);
+        MessageManager.playerLogin(id);
+        MessageManager.messageAllUser("New Player Added:"+username);
         MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Player Added To Game");
     }
     
     //Once for user selects wager
     public void startRound(int wager) {
+        players.addAll(playersToAddAtEndOfRound);
+
         if( wager <= 0 && wager <= tableSettings.getMinWager()){
-            MessageManager.messageUser("Wager Too Low");
+            MessageManager.messageAllUser("Wager Too Low");
             logger.debug("wager input too low:"+wager);
             return;
         }
 
         if( wager > tableSettings.getMaxWager()){
-            MessageManager.messageUser("Wager Too High");
+            MessageManager.messageAllUser("Wager Too High");
             logger.debug("wager input too High:"+wager);
             return;
         }
 
-
         if(playDeck.cardsLeftInDeck()/playDeck.totalCards() < tableSettings.getpercentageDeckUseBeforeShuffle()/100){
             playDeck=new PlayDeck(tableSettings.getNumDecks());
-            MessageManager.messageUser("Shuffling Cards");
             logger.debug("Shuffling Cards");
         }
 
@@ -107,7 +114,7 @@ public class GameStateManager {
 
         if(bankRollCheck < (currentHands + 1)*currentWager){
             logger.debug("Not enough to split", playerId);
-            MessageManager.promptUpdateJson(round.toJson(), "Not enough to split: "+targetPlayer.getPlayerName());
+            MessageManager.messageSingleUser("Not enough to split", playerId);
         }
         
         if(round.splitHand(playerId, handArrayNum)){
@@ -115,7 +122,7 @@ public class GameStateManager {
             MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Player split: "+targetPlayer.getPlayerName());
         }else{
             logger.debug("Failed Split", playerId);
-            MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Failed Player split: "+targetPlayer.getPlayerName());
+            MessageManager.messageSingleUser("Failed Split", playerId);
         }
     }
 
@@ -123,32 +130,32 @@ public class GameStateManager {
     public void addCard(int playerId, String username, int handArrayNum, int addedCardNumber){
         if(round.getActionHolder().getPlayerId() != playerId){
             logger.debug("Player not at turn", playerId);
-            MessageManager.promptUpdateJson(round.toJson(), "Not Player's turn: "+username);
+            MessageManager.messageSingleUser("Not Player's turn", playerId);
         }else if(round.addCard( playerId, handArrayNum,addedCardNumber)){
             MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Player hit: "+username);
         }else{
-            MessageManager.promptUpdateJson(round.toJson(), "Can not hit for: "+username);
+            MessageManager.messageSingleUser("You can not hit", playerId);
         }
 
         if(round.roundPlayerActionsOver()){
             endRound();
         }
-        
     }
 
     //hold action
     public void holdHand(int playerId, String username, int handArrayNum){
         if(round.getActionHolder().getPlayerId() == playerId){
-            MessageManager.promptUpdateJson(round.toJson(), "Not Player's turn: "+username);
+            MessageManager.messageSingleUser("Not Player's turn", playerId);
         }
         round.holdHand( playerId, handArrayNum);
-        MessageManager.promptUpdateJson(round.toJson(), "Player Holding: "+username);
 
         if(round.roundPlayerActionsOver()){
             endRound();
+        }else{
+            MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Player Holding "+playerId);
         }
         
-        MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Player Holding "+playerId);
+        
     }
 
 
@@ -185,18 +192,42 @@ public class GameStateManager {
         MessageManager.promptUpdateJson(round == null ? null : round.toJson(),"Updating Accounts");
     }
 
+    public void addCredits(Integer playerId) {
+        logger.debug("Adding Credits to:"+ playerId);
+        Player targetPlayer = getPlayerFromId(playerId);
+        if (targetPlayer == null) {
+            logger.debug("Add credits requested for unknown player id: {}", playerId);
+            MessageManager.messageSingleUser("Player not found:", playerId);
+            return;
+        }
 
-    
+        Player updatedPlayer = playerDataManager.addCredits(targetPlayer, tableSettings.getAddCreditsAmount());
+        players.set(players.indexOf(targetPlayer), updatedPlayer);
+        MessageManager.promptUpdateJson(round == null ? null : round.toJson(), "Credits added to player: " + playerId);
+    }
+
+
+
     public void endGame() {
         MessageManager.promptUpdateJson(round.toJson(), "Game Ended");
     }
 
     public void playerExit(int playerId) {
-        Player targetPlayer=getPlayerFromId(playerId);
-        String targetUserName=targetPlayer.getPlayerName();
+        Player targetPlayer = getPlayerFromId(playerId);
+        if (targetPlayer == null) {
+            logger.debug("Player exit requested for unknown player id: {}", playerId);
+            if (round != null) {
+                MessageManager.promptUpdateJson(round.toJson(), "Player not found: " + playerId);
+            }
+            return;
+        }
+
+        String targetUserName = targetPlayer.getPlayerName();
         players.remove(targetPlayer);
 
-        MessageManager.promptUpdateJson(round.toJson(), "Player Leaving: "+targetUserName);
+        if (round != null) {
+            MessageManager.promptUpdateJson(round.toJson(), "Player Leaving: " + targetUserName);
+        }
     }
 
     public ArrayList<Player> getPlayerList() {
@@ -211,4 +242,5 @@ public class GameStateManager {
         }
         return null;
     }
+
 }

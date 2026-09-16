@@ -55,4 +55,8 @@ public class PlayerStats {
     public Player getPlayer() {
         return new Player(playerName, playerId, currentAccountTotal);
     }
+
+    public void addCredit(int amount) {
+        currentAccountTotal += amount;
+    }
 }

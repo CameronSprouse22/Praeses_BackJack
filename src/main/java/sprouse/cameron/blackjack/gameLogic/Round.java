@@ -11,7 +11,7 @@ import sprouse.cameron.blackjack.deck.Card;
 import sprouse.cameron.blackjack.deck.PlayDeck;
 
 public class Round {
-    private ArrayList<Player> playerList;
+    private final ArrayList<Player> playerList;
     private transient PlayDeck playDeck;
     private HashMap<Integer, ArrayList<GameHand>> playerWithHands;
     private int wager;
@@ -24,7 +24,7 @@ public class Round {
 
     //Starts round, Deals cards, holds one of the deal cards for later
     public Round(ArrayList<Player> playerList, PlayDeck playDeck, int wager) {
-        this.playerList = playerList;
+        this.playerList = new ArrayList<>(playerList);
         this.playerWithHands = new HashMap<>();
         this.playDeck = playDeck;
         this.wager = wager;

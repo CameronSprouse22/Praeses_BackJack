@@ -52,7 +52,7 @@
                             }
                         }
                         setStatus(message);
-                        if (message.startsWith('PlayerJoin:')) {
+                        if (message.startsWith('PlayerLogin:')) {
                             setSubmitted(true);
                         }
                     });
@@ -134,7 +134,9 @@
                 });
             }
             function addCredits() {
-                sendGameAction('UPDATE_ACCOUNT');
+                 sendGameAction('ADD_CREDITS', {
+                    playerId: Number(id),
+                });
             }
             function exit() {
                 sendGameAction('PLAYER_EXIT', { playerId: Number(id) });
@@ -365,7 +367,7 @@
                     e('button', { type: 'button', onClick: hit, disabled: !isPlayersTurn }, 'Hit'),
                     e('button', { type: 'button', onClick: stand, disabled: !isPlayersTurn }, 'Stand'),
                     e('button', { type: 'button', onClick: split, disabled: !isPlayersTurn }, 'Split'),
-                    e('button', {  type: 'button',  onClick: addCredits, disabled: gameStateJson !== null && Object.keys(gameStateJson).length > 0 }, 'addCredits'),
+                    e('button', {  type: 'button',  onClick: addCredits, disabled: gameStateJson !== null && Object.keys(gameStateJson).length > 0 }, 'Add Credits'),
                     e('button', { type: 'button', onClick: exit }, 'Exit'),
                 )
             );

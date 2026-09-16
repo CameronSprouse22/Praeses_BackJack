@@ -38,17 +38,6 @@ public class PlayerDataManager {
         return playerStats.buyIn(amount);
     }
 
-
-    public void loadFromJson(String json) {
-        PlayerDataManager dataManager = new Gson().fromJson(json, PlayerDataManager.class);
-        this.playerStatsMap = dataManager.playerStatsMap;
-    }
-
-    public String toJson() {
-        return new Gson().toJson(this);
-    }
-
-
     //array list in case of splits
     public Player updateAndFetchPlayerData(Player player, ArrayList<GameHand> arrayList, int wager) {
         PlayerStats playerStats= playerStatsMap.get(player.getPlayerId());
@@ -58,4 +47,21 @@ public class PlayerDataManager {
         return playerStats.getPlayer();
     }
 
+    //add credits to currnt account 
+    public Player addCredits(Player player, int addCreditsAmount) {
+        PlayerStats playerStats= playerStatsMap.get(player.getPlayerId());
+        playerStats.addCredit(addCreditsAmount);
+        return playerStats.getPlayer();
+    }
+
+
+    //for saving and loading from file....at some point
+    public void loadFromJson(String json) {
+        PlayerDataManager dataManager = new Gson().fromJson(json, PlayerDataManager.class);
+        this.playerStatsMap = dataManager.playerStatsMap;
+    }
+
+    public String toJson() {
+        return new Gson().toJson(this);
+    }
 }

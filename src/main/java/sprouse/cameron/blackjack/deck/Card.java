@@ -10,7 +10,6 @@ public class Card {
     public Card(EnumCardSuit suit, EnumCardRank rank) {
         this.suit = suit;
         this.rank = rank;
-        this.rank = EnumCardRank.TWO;
         this.value = pointConverter(rank);
     }
 

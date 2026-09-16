@@ -10,37 +10,32 @@ public class MessageManager {
         messagingTemplate = template;
     }
 
+    
+    public static void playerLogin( int userId) {
+        if (messagingTemplate != null) {
+            messagingTemplate.convertAndSend("/topic/messages", EnumGameFunction.PlayerLogin+": "+userId);
+        }
+    }
+
+    //send round json added with log
     public static void promptUpdateJson(String json, String string) {
         if (messagingTemplate != null) {
-            messagingTemplate.convertAndSend("/topic/messages", EnumGameFunction.ChatMessage+":"+string);
+            messagingTemplate.convertAndSend("/topic/messages", EnumGameFunction.Log+":"+string);
             messagingTemplate.convertAndSend("/topic/messages", EnumGameFunction.JsonUpdate+":"+json);
         }
     }
 
-    public static void messageUser(String badPlayerDataString) {
+    public static void messageSingleUser(String message, int userId) {
         if (messagingTemplate != null) {
-            messagingTemplate.convertAndSend("/topic/messages", badPlayerDataString);
+            messagingTemplate.convertAndSend("/topic/messages", userId);
+            messagingTemplate.convertAndSend("/topic/messages", EnumGameFunction.SingleUser+":"+userId+" "+message);
         }
     }
 
-    public static void gameTableCreated(String string) {
-        messageUser(EnumGameFunction.PlayerJoin + ":" + string);
+    public static void messageAllUser(String message) {
+        if (messagingTemplate != null) {
+            messagingTemplate.convertAndSend("/topic/messages", EnumGameFunction.AllUsers+": "+message);
+        }
     }
-
-    public static void playerAdded(String string) {
-        messageUser(EnumGameFunction.PlayerJoin + ":" + string);
-    }
-
-    public static void playerAlreadyAdded(String string) {
-        messageUser(EnumGameFunction.PlayerJoin + ":" + string);
-    }
-
-    public static void giveUserError(Object object, int id, String string) {
-        promptUpdateJson(object == null ? null : object.toString(),
-                EnumGameFunction.ErrorMessage + " for player " + id + ": " + string);
-    }
-
-
-
 
 }

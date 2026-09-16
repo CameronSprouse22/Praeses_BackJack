@@ -1,0 +1,58 @@
+Workflow
+    Once the Java/Spring application starts, it opens a WebSocket and waits for players to join.
+    At least one player joins, and GameStateManager is created while waiting for users to start the round.
+    A new player (not found in PlayerDataManager) can join. If they are new to the system, they are added with a base amount of chips.
+    A player selects Start Round, and a Round object is created with a given wager and player list. The player list cannot be changed.
+    Cards are dealt, and each player receives two cards.
+    Players take turns performing actions such as hit, hold, and split. Splits are unlimited and represented as a new tab.
+    Once a player is done with their actions, it moves to the next player.
+    Once the last player takes a hit or holds, the round automatically ends.
+    Results are shown, the dealer’s other card is revealed, and all hands are scored as a win, loss, or draw.
+    The round ends, and credits for each player are adjusted.
+    Any player can select a new round.
+
+
+
+Package
+    configurations
+        TableSettings.java
+            Holds all settings such as wager, account bank, and shuffle thresholds. All values are pulled from this class.
+    controllers
+        WebSocketConfig.java
+            Configures Spring’s STOMP WebSocket messaging.
+        WebSocketMessageController.java
+            Receives game commands from the frontend and forwards them to the blackjack game logic.
+    deck
+        Card.java
+            Holds card suit and rank. Holds points for ranking.
+        EnumCardRank.java
+            Holds all ranks.
+        EnumCardSuit.java
+            Holds all suits.
+        PlayDeck.java
+            Takes in a given number of decks and shuffles the deck.
+    gameio
+        EnumGameFunction.java
+            Holds game functions, though not all are used currently.
+        GameMessage.java
+            Contains generic values for frontend-to-backend messages.
+        MessageManager.java
+            Sets the type for the frontend and sends it.
+    gameLogic
+        EnumHandResult.java
+            Holds win, lose, and draw results.
+        EnumHandState.java
+            Holds different types of card combinations, such as under 21 and blackjack.
+        EnumPlayerStatus.java
+            Holds player status such as active or low funds.
+        GameHand.java
+            Keeps data and scoring on the current hand.
+        GameStateManager.java
+            Controls all game flow and pushes events to the round object.
+        Player.java
+        Round.java
+    playerdata
+        PlayerDataManager.java
+            Edits and saves data and player stats.
+        PlayerStats.java
+            Holds player stats such as wins and losses.

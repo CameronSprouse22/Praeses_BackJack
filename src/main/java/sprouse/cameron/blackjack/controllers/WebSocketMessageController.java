@@ -89,7 +89,11 @@ public class WebSocketMessageController {
                 message.getPlayerId()
             );
             break;
-
+        case "ADD_CREDITS":
+            gameStateManager.addCredits(
+                message.getPlayerId()
+            );
+            break;
         default:
             throw new IllegalArgumentException(
                 "Unknown action: " + message.getAction()

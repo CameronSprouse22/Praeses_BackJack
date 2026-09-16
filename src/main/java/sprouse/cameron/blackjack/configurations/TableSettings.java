@@ -7,6 +7,7 @@ public class TableSettings {
     int minWager=1;
     int maxWager=20;
     int startWithAmount=500;
+    int addCreditsAmount=50;
     int tableWaitTime;
     int percentageDeckUseBeforeShuffle=50;
     int numDecks=10;
@@ -29,6 +30,10 @@ public class TableSettings {
 
     public int getNumDecks() {
         return numDecks;
+    }
+
+    public int getAddCreditsAmount(){
+        return addCreditsAmount;
     }
 
 }
